@@ -32,7 +32,10 @@ int main(int argc, char** argv) {
 
     SAMFileParser file(SAMFileName);
     file.parseFile();
-    //file.compress();
-    
+    file.compress();
+    file.saveCompressedDataToFile("fileTest");
+    file.readCompressedDataFromFile("fileTest");
+    file.decompress();
+    file.recreateFile("out");
     return 0;
 }

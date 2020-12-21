@@ -12,8 +12,12 @@ class SAMFileParser
 public:
     SAMFileParser(std::string fileName);
     ~SAMFileParser();
+    void saveCompressedDataToFile(std::string fileName);
+    void readCompressedDataFromFile(std::string fileName);
+    void recreateFile(std::string fileName);
     const void parseFile();
     void compress(void);
+    void decompress(void);
 
 private:
     void printSupportiveData(void) const;
@@ -34,8 +38,12 @@ private:
     std::string m_Header;
     uint64_t m_SeqMin = std::numeric_limits<uint64_t>::max();
     uint64_t m_SeqMax = 0;
-    void **m_FieldsCompressed;
-    void *m_HeaderCompressed;
+    char **m_FieldsCompressed = nullptr;
+    char *m_HeaderCompressed = nullptr;
+    size_t m_CompressedHeaderDataSize = 0;
+    size_t m_OriginalHeaderDataSize = 0;
+    size_t m_CompressedFieldsDataSize[12] = {0};
+    size_t m_OriginalFieldsDataSize[12] = {0};
 };
 
 #endif
