@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -O2 -g -std=c++11
+CXXFLAGS = -O3 -g -std=c++17
 INC=-I./inc -I./lib/fse
 SRC = ./src
 FSEDIR = ./lib/fse
@@ -7,7 +7,7 @@ FSEDIR = ./lib/fse
 all: SAMFileReader
 
 SAMFileReader: SAMFileReader.o main.o
-	$(CXX) -g $(INC) SAMFileReader.o main.o $(FSEDIR)/entropy_common.c $(FSEDIR)/fse_compress.c $(FSEDIR)/fse_decompress.c $(FSEDIR)/hist.c -o SAMFileReader
+	$(CXX) -O3 -g $(INC) SAMFileReader.o main.o $(FSEDIR)/entropy_common.c $(FSEDIR)/fse_compress.c $(FSEDIR)/fse_decompress.c $(FSEDIR)/hist.c -o  SAMFileReader -lstdc++fs
 
 main.o: $(SRC)/main.cc
 	$(CXX) -g $(CXXFLAGS) -c $(SRC)/main.cc

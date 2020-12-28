@@ -7,6 +7,17 @@
 #include <limits>
 #include <map>
 
+struct tab_is_not_whitespace : std::ctype<char> 
+{
+    static const mask* make_table()
+    {
+        static std::vector<mask> v(classic_table(), classic_table() + table_size);
+        v['\t'] &= ~space;      // tab will not be classified as whitespace
+        return &v[0];
+    }
+    tab_is_not_whitespace(std::size_t refs = 0) : ctype(make_table(), false, refs) {}
+};
+
 class SAMFileParser
 {
 public:
@@ -14,22 +25,24 @@ public:
     ~SAMFileParser();
     void saveCompressedDataToFile(std::string fileName);
     void readCompressedDataFromFile(std::string fileName);
-    void recreateFile(std::string fileName);
+    void recreateFile(void);
     const void parseFile();
     void compress(void);
     void decompress(void);
 
 private:
     void printSupportiveData(void) const;
+    void printCompressionData(std::string outFileName) const;
     void splitLine(std::string &line, const std::string &delimiter);
-    
     inline bool isHeader(const std::string &line) const
     {
         return *line.begin() == '@';
     }
+
     std::map<uint32_t, uint32_t> m_HeaderDelimiters;
     std::map<uint32_t, uint32_t> m_AligmentDelimiters;
     std::vector<std::string> m_SAMFields{12};
+    std::vector<std::vector<std::string>> m_SAMFieldsSplitted{12};
     uint32_t m_WrongLinesCount = 0;
     uint32_t m_AligmentLinesCount = 0;
     uint32_t m_HeaderLinesCount = 0;

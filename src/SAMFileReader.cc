@@ -4,10 +4,10 @@
 #include "../lib/fse/fse.h"
 #include <regex>
 #include <algorithm>
+#include <experimental/filesystem>
 
 SAMFileParser::SAMFileParser(std::string fileName) : m_FileName(fileName)
 {
-    m_FileStream.open(m_FileName);
     m_Header.reserve(5000);
     for(int i = 0 ; i < 12 ; ++i) {
         m_SAMFields.reserve(50000);
@@ -30,6 +30,7 @@ SAMFileParser::~SAMFileParser()
 }
 
 const void SAMFileParser::parseFile(void) {
+    m_FileStream.open(m_FileName);
     std::string line;
     line.reserve(4000);
     size_t noOfDelimiters = 0;
@@ -50,24 +51,17 @@ const void SAMFileParser::parseFile(void) {
             m_Header.append(line + "\r");
         }
     }
-    printSupportiveData();
 }
 
 void SAMFileParser::compress(void)
 {
     m_OriginalHeaderDataSize = m_Header.size() + 1;
-    std::cout << "Header Original Size : " << m_Header.size() + 1 << std::endl;
     size_t headerDestinationCapacity = FSE_compressBound(m_Header.size() + 1);
     m_HeaderCompressed = new char[headerDestinationCapacity];
     m_CompressedHeaderDataSize = FSE_compress(m_HeaderCompressed, headerDestinationCapacity + 1, m_Header.c_str() , m_Header.size() + 1);
-    std::cout << "Header: => size : ";
     if(FSE_isError(m_CompressedHeaderDataSize))
     {
         std::cout << FSE_getErrorName(m_CompressedHeaderDataSize) << std::endl;
-    }
-    else
-    {
-        std::cout << m_CompressedHeaderDataSize << std::endl;
     }
     m_Header.clear();
     m_Header.shrink_to_fit();
@@ -77,17 +71,45 @@ void SAMFileParser::compress(void)
         size_t destinationCapacity = FSE_compressBound(m_SAMFields.at(i).size() + 1);
         m_FieldsCompressed[i] = new char[destinationCapacity];
         m_CompressedFieldsDataSize[i] = FSE_compress(m_FieldsCompressed[i], destinationCapacity, m_SAMFields.at(i).c_str() , m_SAMFields.at(i).size() + 1);
-        std::cout << "field no: " << i+1 << " => size : "; 
         if(FSE_isError(m_CompressedFieldsDataSize[i]))
         {
             std::cout << FSE_getErrorName(m_CompressedFieldsDataSize[i]) << std::endl;
         }
-        else
-        {
-            std::cout << m_CompressedFieldsDataSize[i] << std::endl;
-        }
         m_SAMFields.at(i).clear();
         m_SAMFields.at(i).shrink_to_fit();
+    }
+}
+
+void SAMFileParser::printCompressionData(std::string outFileName) const
+{
+    auto originalFileSize = std::experimental::filesystem::file_size(m_FileName);
+    auto compressedFileSize = std::experimental::filesystem::file_size(outFileName);
+    std::cout << "=========================================" << std::endl;
+    auto fileCompressionRatio = ((compressedFileSize) / static_cast<double>(originalFileSize)) * 100;
+    std::cout << "Original file size : " << originalFileSize << " bytes"<< std::endl;
+    std::cout << "Compressed file size: " <<  compressedFileSize << " bytes" << std::endl;
+    std::cout << "File Compression ratio: " << fileCompressionRatio << std::endl;
+    std::cout << "=========================================" << std::endl;
+    auto headerFileRatio = ((m_OriginalHeaderDataSize) / static_cast<double>(originalFileSize)) * 100;
+    auto headerCompressionRatio = ((m_CompressedHeaderDataSize) / static_cast<double>(m_OriginalHeaderDataSize)) * 100;
+    auto compressedHeaderFileRatio = ((m_CompressedHeaderDataSize) / static_cast<double>(compressedFileSize)) * 100;
+    std::cout << "Header original size: " <<  m_OriginalHeaderDataSize << " bytes" << std::endl;
+    std::cout << "Header occupies " << headerFileRatio << " % of the original file size" << std::endl;
+    std::cout << "Header compressed size: " <<  m_CompressedHeaderDataSize << " bytes" << std::endl;
+    std::cout << "Header occupies " << compressedHeaderFileRatio << " % of the compressed file" << std::endl;
+    std::cout << "Header Compression ratio: " << headerCompressionRatio << std::endl;
+
+    for(int i = 0 ; i < 12 ; ++i)
+    {
+        std::cout << "=========================================" << std::endl;
+        auto fieldFileRatio = ((m_OriginalFieldsDataSize[i]) / static_cast<double>(originalFileSize)) * 100;
+        auto compressedFieldFileRatio = ((m_CompressedFieldsDataSize[i]) / static_cast<double>(compressedFileSize)) * 100;
+        auto fieldCompressionRatio = ((m_CompressedFieldsDataSize[i]) / static_cast<double>(m_OriginalFieldsDataSize[i])) * 100;
+        std::cout << "field " << i+1 << ") original size: " <<  m_OriginalFieldsDataSize[i] << " bytes" << std::endl;
+        std::cout << "field " << i+1 << ") occupies " << fieldFileRatio << " % of the original file" << std::endl;
+        std::cout << "field " << i+1 << ") compressed size: " <<  m_CompressedFieldsDataSize[i] << " bytes" << std::endl;
+        std::cout << "field " << i+1 << ") occupies " << compressedFieldFileRatio << " % of the compressed file" << std::endl;
+        std::cout << "field " << i+1 << ") Compression ratio: " << fieldCompressionRatio << " %" << std::endl;
     }
 }
 
@@ -111,7 +133,10 @@ void SAMFileParser::decompress(void)
         {
             std::cout << FSE_getErrorName(dataSize) << std::endl;
         }
-        m_SAMFields[i] = fieldDecompressed;
+        std::istringstream iss(fieldDecompressed);
+        iss.imbue(std::locale(iss.getloc(), new tab_is_not_whitespace));
+        m_SAMFieldsSplitted.at(i) = {std::istream_iterator<std::string>{iss},
+                                    std::istream_iterator<std::string>{}};
         delete [] fieldDecompressed;
     }
 }
@@ -175,13 +200,19 @@ void SAMFileParser::printSupportiveData(void) const
     std::cout << "Max sequence size : " << m_SeqMin << "bp" << std::endl;
 }
 
+// ntohl
 void SAMFileParser::saveCompressedDataToFile(std::string fileName)
 {
   std::ofstream toFile;
   toFile.open (fileName + ".test", std::ios::out | std::ios::app | std::ios::binary);
+  toFile.write(reinterpret_cast<const char *>(&m_OriginalHeaderDataSize), sizeof(m_OriginalHeaderDataSize));
+  toFile.write(reinterpret_cast<const char *>(&m_OriginalFieldsDataSize[0]), 12*sizeof(size_t));
+  toFile.write(reinterpret_cast<const char *>(&m_CompressedHeaderDataSize), sizeof(m_CompressedHeaderDataSize));
+  toFile.write(reinterpret_cast<const char *>(&m_CompressedFieldsDataSize[0]), 12*sizeof(size_t));
   toFile.write(m_HeaderCompressed, m_CompressedHeaderDataSize);
   delete [] m_HeaderCompressed;
   m_HeaderCompressed = nullptr;
+  
   for(int i = 0 ; i < 12 ; ++i)
   {
     toFile.write(m_FieldsCompressed[i], m_CompressedFieldsDataSize[i]);
@@ -189,14 +220,22 @@ void SAMFileParser::saveCompressedDataToFile(std::string fileName)
     m_FieldsCompressed[i] = nullptr;
   }
   toFile.close();
+  printCompressionData(fileName + ".test");
 }
 
+// ntohl
 void SAMFileParser::readCompressedDataFromFile(std::string fileName)
 {
    std::ifstream inFile;
    inFile.open (fileName + ".test", std::ios::in | std::ios::binary);
+   inFile.read(reinterpret_cast<char *>(&m_OriginalHeaderDataSize), sizeof(m_OriginalHeaderDataSize));
+   inFile.read(reinterpret_cast<char *>(&m_OriginalFieldsDataSize[0]), 12*sizeof(size_t));
+   inFile.read(reinterpret_cast<char *>(&m_CompressedHeaderDataSize), sizeof(m_CompressedHeaderDataSize));
+   inFile.read(reinterpret_cast<char *>(&m_CompressedFieldsDataSize[0]), 12*sizeof(size_t));
+
    m_HeaderCompressed = new char[m_CompressedHeaderDataSize];
    inFile.read(m_HeaderCompressed, m_CompressedHeaderDataSize);
+
    for(int i = 0 ; i < 12 ; ++i)
    {
     m_FieldsCompressed[i] = new char[m_CompressedFieldsDataSize[i]];
@@ -205,10 +244,10 @@ void SAMFileParser::readCompressedDataFromFile(std::string fileName)
   inFile.close();   
 }
 
-void SAMFileParser::recreateFile(std::string fileName)
+void SAMFileParser::recreateFile(void)
 {
     std::ofstream toFile;
-    toFile.open(fileName + ".sam", std::ios::out | std::ios::app);
+    toFile.open(m_FileName + ".sam", std::ios::out | std::ios::app);
     std::string::size_type delimiterPosition = 0;
     std::string delimiter = "\r";
     while(true)
@@ -232,30 +271,20 @@ void SAMFileParser::recreateFile(std::string fileName)
             }
         }
     }
+    toFile << "\n";
     m_Header.clear();
     m_Header.shrink_to_fit();
     bool loopPredicate = true;
     delimiter = " ";
-    while(loopPredicate)
+    std::string line;
+    line.reserve (100000000);
+    for(int j = 0 ; j < m_SAMFieldsSplitted.at(0).size(); ++j)
     {
-        for(int i = 0 ; i < 12 ; ++i)
-        {
-          delimiterPosition = m_SAMFields.at(i).find_first_of(delimiter);
-          if(delimiterPosition == std::string::npos)
-          {
-              loopPredicate = false;
-              break;
-          }
-          if(i != 11)
-          {
-            toFile << m_SAMFields.at(i).substr(0, delimiterPosition) << '\t';
-          }
-          else
-          {
-            toFile << m_SAMFields.at(i).substr(0, delimiterPosition) << '\n';
-          }
-          m_SAMFields.at(i).erase(0, delimiterPosition + delimiter.length());
+        for(int i = 0 ; i < 11 ; ++i) {
+            line += m_SAMFieldsSplitted.at(i).at(j) + '\t';
         }
+        line += m_SAMFieldsSplitted.at(11).at(j) + "\n";
     }
+    toFile.write(line.c_str(), line.size());
     toFile.close();   
 }
