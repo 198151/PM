@@ -71,9 +71,7 @@ int main(int argc, char** argv) {
         std::cout << "Parsing: " << std::chrono::duration_cast<std::chrono::milliseconds>(parseEnd - parseBegin).count() << "[ms]" << std::endl;
         std::cout << "Compressing: " << std::chrono::duration_cast<std::chrono::milliseconds>(compressEnd - compressBegin).count() << "[ms]" << std::endl;
         std::cout << "Saving: " << std::chrono::duration_cast<std::chrono::milliseconds>(saveEnd - saveBegin).count() << "[ms]" << std::endl;
-
         std::cout << "All: " << std::chrono::duration_cast<std::chrono::milliseconds>((saveEnd - saveBegin) + (parseEnd - parseBegin) + (compressEnd - compressBegin)).count() << "[ms]" << std::endl;
-
     }
     else
     {

@@ -12,10 +12,25 @@ struct tab_is_not_whitespace : std::ctype<char>
     static const mask* make_table()
     {
         static std::vector<mask> v(classic_table(), classic_table() + table_size);
-        v['\t'] &= ~space;      // tab will not be classified as whitespace
+        v['\t'] &= ~space;
         return &v[0];
     }
     tab_is_not_whitespace(std::size_t refs = 0) : ctype(make_table(), false, refs) {}
+};
+
+struct only_cr_is_whitespace : std::ctype<char> 
+{
+    static const mask* make_table()
+    {
+        static std::vector<mask> v(classic_table(), classic_table() + table_size);
+        v[' '] &= ~space;
+        v['\n'] &= ~space;
+        v['\t'] &= ~space;
+        v['\v'] &= ~space;
+        v['\f'] &= ~space;
+        return &v[0];
+    }
+    only_cr_is_whitespace(std::size_t refs = 0) : ctype(make_table(), false, refs) {}
 };
 
 class SAMFileParser
@@ -24,6 +39,7 @@ public:
     SAMFileParser(std::string fileName);
     ~SAMFileParser();
     void saveCompressedDataToFile(std::string fileName);
+    void saveCompressedDataToFile_experimental(std::string fileName);
     void readCompressedDataFromFile(std::string fileName);
     void recreateFile(void);
     const void parseFile();
@@ -31,6 +47,7 @@ public:
     void decompress(void);
 
 private:
+    void compress_experimental(const char *src, char* dst, size_t dataSize);
     void printSupportiveData(void) const;
     void printCompressionData(std::string outFileName) const;
     void splitLine(std::string &line, const std::string &delimiter);
@@ -49,6 +66,7 @@ private:
     std::string m_FileName;
     std::ifstream m_FileStream;
     std::string m_Header;
+    std::vector<std::string> m_HeaderVec;
     uint64_t m_SeqMin = std::numeric_limits<uint64_t>::max();
     uint64_t m_SeqMax = 0;
     char **m_FieldsCompressed = nullptr;

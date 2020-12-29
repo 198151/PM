@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include "../lib/fse/fse.h"
+#include "../lib/fse/huf.h"
 #include <regex>
 #include <algorithm>
 #include <experimental/filesystem>
@@ -80,6 +81,90 @@ void SAMFileParser::compress(void)
     }
 }
 
+void SAMFileParser::compress_experimental(const char *src, char* dst, size_t dataSize)
+{
+    std::ofstream outFile("Data.log", std::ios::out | std::ios::app);
+    size_t fieldOriginalSize = dataSize;
+    size_t chunksNumber = fieldOriginalSize / 128000;
+    char** dataChunks = new char*[chunksNumber + 1];
+    outFile<< "Original File Size : " << fieldOriginalSize << std::endl;
+    outFile << "Chunks : " << chunksNumber << std::endl;
+    std::stringstream dataStream(src);
+    for(int i = 0 ; i < chunksNumber ; ++i)
+    {
+        dataChunks[i] = new char[128000];
+        dataStream.read(dataChunks[i], 128000);
+    }
+    char* temp = new char[128000];
+    size_t blockSize = dataStream.readsome(temp, 128000);
+    outFile << "Last Block Size: " << blockSize << std::endl;
+    dataChunks[chunksNumber] = new char[blockSize];
+    memcpy(dataChunks[chunksNumber], temp, blockSize);
+
+    size_t fails = 0;
+    size_t cumulativeSize = 0;
+    char** compressedDataChunks = new char*[chunksNumber + 1];
+    size_t generalCompressBound = HUF_compressBound(128000);
+    for(int i = 0 ; i < chunksNumber ; ++i)
+    {
+        compressedDataChunks[i] = new char[generalCompressBound];
+        size_t compressedChunkDataSize = HUF_compress(compressedDataChunks[i], generalCompressBound, dataChunks[i] , 128000);
+        if(HUF_isError(compressedChunkDataSize))
+        {   
+            fails += 1;
+            outFile << HUF_getErrorName(compressedChunkDataSize) << std::endl;
+        }
+        else
+        {
+            if(compressedChunkDataSize == 0 || compressedChunkDataSize == 1)
+            {
+                fails += 1;
+            }
+            outFile << "=========================================================" << std::endl;
+            outFile << i+1 << ") Original chunk size : 128000 bytes" << std::endl;
+            outFile << i+1 << ") Compressed chunkSize : " << compressedChunkDataSize << std::endl;
+            outFile << i+1 << ") Chunk compression ratio : " << (compressedChunkDataSize / 128000.) * 100. << std::endl;;
+            cumulativeSize += compressedChunkDataSize;
+        }
+    }
+
+    size_t lastChunkCompressBound = HUF_compressBound(blockSize);
+    compressedDataChunks[chunksNumber] = new char[lastChunkCompressBound];
+    size_t compressedChunkDataSize = HUF_compress(compressedDataChunks[chunksNumber], lastChunkCompressBound, dataChunks[chunksNumber] , blockSize);
+    if(HUF_isError(compressedChunkDataSize))
+    {
+        fails += 1;
+        outFile << HUF_getErrorName(compressedChunkDataSize) << std::endl;
+    }
+    else
+    {
+        outFile << "=========================================================" << std::endl;
+        outFile << chunksNumber+1 << ") Original chunk size : " << blockSize << " bytes" << std::endl;
+        outFile << chunksNumber+1 << ") Compressed chunkSize : " << compressedChunkDataSize << std::endl;
+        outFile << chunksNumber+1 << ") Chunk compression ratio : " << (compressedChunkDataSize / static_cast<double>(blockSize)) * 100. << std::endl;;
+        cumulativeSize += compressedChunkDataSize;
+    }
+
+    outFile << "=========================================================" << std::endl;
+    outFile << "Field original size : " << fieldOriginalSize << std::endl;
+    outFile << "Field compressed size : " << cumulativeSize << std::endl;
+    outFile << "Field compression ratio : " << (cumulativeSize / static_cast<double>(fieldOriginalSize)) * 100. << std::endl;;
+    outFile << "Number of errors : " << fails << std::endl;
+    outFile.close();
+
+    for(int i = 0 ; i <= chunksNumber; ++i)
+    {
+        delete [] dataChunks[i];
+    }
+    delete [] dataChunks;
+
+    for(int i = 0 ; i <= chunksNumber; ++i)
+    {
+        delete [] compressedDataChunks[i];
+    }
+    delete [] compressedDataChunks;
+}
+
 void SAMFileParser::printCompressionData(std::string outFileName) const
 {
     auto originalFileSize = std::experimental::filesystem::file_size(m_FileName);
@@ -122,7 +207,10 @@ void SAMFileParser::decompress(void)
     {
         std::cout << FSE_getErrorName(dataSize) << std::endl;
     }
-    m_Header = headerDecompressed;
+    std::istringstream headerStream(headerDecompressed);
+    headerStream.imbue(std::locale(headerStream.getloc(), new only_cr_is_whitespace));
+    m_HeaderVec = {std::istream_iterator<std::string>{headerStream},
+                  std::istream_iterator<std::string>{}};
     delete [] headerDecompressed;
     for(int i = 0 ; i < 12 ; ++i)
     {
@@ -223,6 +311,31 @@ void SAMFileParser::saveCompressedDataToFile(std::string fileName)
   printCompressionData(fileName + ".test");
 }
 
+void SAMFileParser::saveCompressedDataToFile_experimental(std::string fileName)
+{
+  std::ofstream toFile;
+  toFile.open (fileName + ".test", std::ios::out | std::ios::app | std::ios::binary);
+  std::stringstream css(std::ios::out | std::ios::app | std::ios::binary);
+  css.write(reinterpret_cast<const char *>(&m_OriginalHeaderDataSize), sizeof(m_OriginalHeaderDataSize));
+  css.write(reinterpret_cast<const char *>(&m_OriginalFieldsDataSize[0]), 12*sizeof(size_t));
+  css.write(reinterpret_cast<const char *>(&m_CompressedHeaderDataSize), sizeof(m_CompressedHeaderDataSize));
+  css.write(reinterpret_cast<const char *>(&m_CompressedFieldsDataSize[0]), 12*sizeof(size_t));
+  css.write(m_HeaderCompressed, m_CompressedHeaderDataSize);
+  delete [] m_HeaderCompressed;
+  m_HeaderCompressed = nullptr;
+  
+  for(int i = 0 ; i < 12 ; ++i)
+  {
+    css.write(m_FieldsCompressed[i], m_CompressedFieldsDataSize[i]);
+    delete [] m_FieldsCompressed[i];
+    m_FieldsCompressed[i] = nullptr;
+  }
+  char *data = nullptr;
+  compress_experimental(css.str().c_str(), data, css.str().size() - 1);
+  toFile.close();
+  printCompressionData(fileName + ".test");
+}
+
 // ntohl
 void SAMFileParser::readCompressedDataFromFile(std::string fileName)
 {
@@ -232,7 +345,6 @@ void SAMFileParser::readCompressedDataFromFile(std::string fileName)
    inFile.read(reinterpret_cast<char *>(&m_OriginalFieldsDataSize[0]), 12*sizeof(size_t));
    inFile.read(reinterpret_cast<char *>(&m_CompressedHeaderDataSize), sizeof(m_CompressedHeaderDataSize));
    inFile.read(reinterpret_cast<char *>(&m_CompressedFieldsDataSize[0]), 12*sizeof(size_t));
-
    m_HeaderCompressed = new char[m_CompressedHeaderDataSize];
    inFile.read(m_HeaderCompressed, m_CompressedHeaderDataSize);
 
@@ -247,37 +359,15 @@ void SAMFileParser::readCompressedDataFromFile(std::string fileName)
 void SAMFileParser::recreateFile(void)
 {
     std::ofstream toFile;
-    toFile.open(m_FileName + ".sam", std::ios::out | std::ios::app);
-    std::string::size_type delimiterPosition = 0;
-    std::string delimiter = "\r";
-    while(true)
-    {
-        delimiterPosition = m_Header.find_first_of(delimiter);
-        if(delimiterPosition == std::string::npos)
-        {
-            break;
-        }
-        else
-        {
-            std::string line = m_Header.substr(0, delimiterPosition);
-            m_Header.erase(0, delimiterPosition + delimiter.length());
-            if(m_Header.find_first_of(delimiter) != std::string::npos)
-            {
-                toFile << line << '\n';
-            }
-            else
-            {
-                toFile << line;
-            }
-        }
-    }
-    toFile << "\n";
-    m_Header.clear();
-    m_Header.shrink_to_fit();
-    bool loopPredicate = true;
-    delimiter = " ";
     std::string line;
     line.reserve (100000000);
+    toFile.open(m_FileName + ".sam", std::ios::out | std::ios::app);
+    for(int i = 0 ; i < m_HeaderVec.size() ; ++i)
+    {
+        line += m_HeaderVec.at(i) + "\n";
+    }
+    m_HeaderVec.clear();
+    m_HeaderVec.shrink_to_fit();
     for(int j = 0 ; j < m_SAMFieldsSplitted.at(0).size(); ++j)
     {
         for(int i = 0 ; i < 11 ; ++i) {
