@@ -7,6 +7,7 @@
 #include <limits>
 #include <unordered_map>
 #include <map>
+#include <mutex>
 
 struct tab_is_not_whitespace : std::ctype<char> 
 {
@@ -82,15 +83,28 @@ public:
     const void parseFile();
     const void parseFile_experimental();
 
+    void compressionThread_zstd(int index);
+    void compressionThread_fse(int index);
+    void compressionThread_gzip(int index);
+    void decompressionThread_fse(int index);
+    void decompressionThread_zstd(int index);
+    void decompressionThread_gzip(int index);
+
 
     void compress_fse(void);
+    void compress_fse_multithread(void);
     void decompress_fse(void);
+    void decompress_fse_multithread(void);
 
     void compress_zstd(void);
+    void compress_zstd_multithread(void);
     void decompress_zstd(void);
+    void decompress_zstd_multithread(void);
 
     void compress_gzip(void);
+    void compress_gzip_multithread(void);
     void decompress_gzip(void);
+    void decompress_gzip_multithread(void);
 
     void compress_fse_experimental(void);
     void decompress_fse_experimental(void);
@@ -147,6 +161,11 @@ private:
     std::unordered_map<std::string, char> m_optionalHeaderTable;
     std::unordered_map<std::string, std::string> m_optionalTypeTable;
     std::map<std::string, name_type> m_optionalDataTable;
+
+    std::mutex m_mutex_1;
+    std::mutex m_mutex_2;
+    std::mutex m_mutex_3;
+    std::mutex m_mutex_4;
 };
 
 #endif

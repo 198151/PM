@@ -5,6 +5,8 @@
 #include "../lib/fse/huf.h"
 #include <regex>
 #include <algorithm>
+#include <thread>
+#include <future>
 #include <experimental/filesystem>
 #include <numeric>
 #include <zstd.h>
@@ -102,7 +104,7 @@ void SAMFileParser::compress_zstd(void)
     m_OriginalHeaderDataSize = m_Header.size() + 1;
     size_t headerDestinationCapacity = ZSTD_compressBound(m_Header.size() + 1);
     m_HeaderCompressed = new char[headerDestinationCapacity];
-    m_CompressedHeaderDataSize = ZSTD_compress(m_HeaderCompressed, headerDestinationCapacity + 1, m_Header.c_str() , m_Header.size() + 1, 5);
+    m_CompressedHeaderDataSize = ZSTD_compress(m_HeaderCompressed, headerDestinationCapacity + 1, m_Header.c_str() , m_Header.size() + 1, 11);
     if(ZSTD_isError(m_CompressedHeaderDataSize))
     {
         std::cout << ZSTD_getErrorName(m_CompressedHeaderDataSize) << std::endl;
@@ -114,13 +116,150 @@ void SAMFileParser::compress_zstd(void)
         m_OriginalFieldsDataSize[i] = m_SAMFields.at(i).size() + 1;
         size_t destinationCapacity = ZSTD_compressBound(m_SAMFields.at(i).size() + 1);
         m_FieldsCompressed[i] = new char[destinationCapacity];
-        m_CompressedFieldsDataSize[i] = ZSTD_compress(m_FieldsCompressed[i], destinationCapacity, m_SAMFields.at(i).c_str() , m_SAMFields.at(i).size() + 1, 5);
+        m_CompressedFieldsDataSize[i] = ZSTD_compress(m_FieldsCompressed[i], destinationCapacity, m_SAMFields.at(i).c_str() , m_SAMFields.at(i).size() + 1, 11);
         if(ZSTD_isError(m_CompressedFieldsDataSize[i]))
         {
             std::cout << ZSTD_getErrorName(m_CompressedFieldsDataSize[i]) << std::endl;
         }
         m_SAMFields.at(i).clear();
         m_SAMFields.at(i).shrink_to_fit();
+    }
+}
+
+void SAMFileParser::compressionThread_zstd(int index)
+{
+    size_t destinationCapacity = 0;
+    const char * data = nullptr;
+    size_t dataSize = 0;
+    if(index == -1) 
+    {
+        this->m_OriginalHeaderDataSize = this->m_Header.size() + 1;
+        destinationCapacity = ZSTD_compressBound(m_Header.size() + 1);
+        data = this->m_Header.c_str();
+        dataSize = this->m_OriginalHeaderDataSize;
+    }
+    else
+    {
+        this->m_OriginalFieldsDataSize[index] = m_SAMFields.at(index).size() + 1;
+        destinationCapacity = ZSTD_compressBound(m_SAMFields.at(index).size() + 1);
+        data = this->m_SAMFields.at(index).c_str();
+        dataSize = this->m_OriginalFieldsDataSize[index];
+    }
+
+    char * compressed_data = new char[destinationCapacity];
+    auto compressedDataSize = ZSTD_compress(compressed_data, destinationCapacity + 1, data, dataSize, 11);
+    if(ZSTD_isError(compressedDataSize))
+    {
+        std::cout << ZSTD_getErrorName(compressedDataSize) << "\n";
+    }
+    if(index == -1)
+    {   
+        this->m_HeaderCompressed = compressed_data;
+        this->m_CompressedHeaderDataSize = compressedDataSize;
+        this->m_Header.clear();
+        this->m_Header.shrink_to_fit();
+
+    }
+    else
+    {
+        this->m_FieldsCompressed[index] = compressed_data;
+        this->m_CompressedFieldsDataSize[index] = compressedDataSize;
+        this->m_SAMFields.at(index).clear();
+        this->m_SAMFields.at(index).shrink_to_fit();
+    }
+}
+
+void SAMFileParser::compressionThread_fse(int index)
+{
+    size_t destinationCapacity = 0;
+    const char * data = nullptr;
+    size_t dataSize = 0;
+    if(index == -1) 
+    {
+        this->m_OriginalHeaderDataSize = this->m_Header.size() + 1;
+        destinationCapacity = FSE_compressBound(m_Header.size() + 1);
+        data = this->m_Header.c_str();
+        dataSize = this->m_OriginalHeaderDataSize;
+    }
+    else
+    {
+        this->m_OriginalFieldsDataSize[index] = m_SAMFields.at(index).size() + 1;
+        destinationCapacity = FSE_compressBound(m_SAMFields.at(index).size() + 1);
+        data = this->m_SAMFields.at(index).c_str();
+        dataSize = this->m_OriginalFieldsDataSize[index];
+    }
+
+    char * compressed_data = new char[destinationCapacity];
+    auto compressedDataSize = FSE_compress(compressed_data, destinationCapacity + 1, data, dataSize);
+    if(FSE_isError(compressedDataSize))
+    {
+        std::cout << FSE_getErrorName(compressedDataSize) << "\n";
+    }
+    if(index == -1)
+    {   
+        this->m_HeaderCompressed = compressed_data;
+        this->m_CompressedHeaderDataSize = compressedDataSize;
+        this->m_Header.clear();
+        this->m_Header.shrink_to_fit();
+
+    }
+    else
+    {
+        this->m_FieldsCompressed[index] = compressed_data;
+        this->m_CompressedFieldsDataSize[index] = compressedDataSize;
+        this->m_SAMFields.at(index).clear();
+        this->m_SAMFields.at(index).shrink_to_fit();
+    }
+}
+
+void SAMFileParser::compress_zstd_multithread(void)
+{
+    std::vector<std::future<void>> threads;
+    for(int i = 0 ; i <= m_SAMFields.size() ; ++i)
+    {
+        threads.push_back(std::async(&SAMFileParser::compressionThread_zstd, this, i-1));
+    }
+}
+
+void SAMFileParser::compressionThread_gzip(int index)
+{
+    if(index == -1) 
+    {
+        m_OriginalHeaderDataSize = m_Header.size();
+        std::string compressed_data = gzip::compress(m_Header.c_str(), m_OriginalHeaderDataSize, Z_DEFAULT_COMPRESSION);
+        m_HeaderCompressed = new char[compressed_data.size()];
+        compressed_data.copy(m_HeaderCompressed, compressed_data.size(), 0);
+        m_CompressedHeaderDataSize = compressed_data.size();
+        m_Header.clear();
+        m_Header.shrink_to_fit();
+    }
+    else
+    {
+        m_OriginalFieldsDataSize[index] = m_SAMFields.at(index).size();
+        std::string compressed_field_data = gzip::compress(m_SAMFields.at(index).c_str(), m_OriginalFieldsDataSize[index], Z_DEFAULT_COMPRESSION);
+        m_FieldsCompressed[index] = new char[compressed_field_data.size()];
+        compressed_field_data.copy(m_FieldsCompressed[index], compressed_field_data.size(), 0);
+        m_CompressedFieldsDataSize[index] = compressed_field_data.size();
+        m_SAMFields.at(index).clear();
+        m_SAMFields.at(index).shrink_to_fit();
+    }
+}
+
+void SAMFileParser::compress_fse_multithread(void)
+{
+    std::vector<std::future<void>> threads;
+    for(int i = 0 ; i <= m_SAMFields.size() ; ++i)
+    {
+        threads.push_back(std::async(&SAMFileParser::compressionThread_fse, this, i-1));
+    }
+}
+
+void SAMFileParser::compress_gzip_multithread(void)
+{
+    std::vector<std::future<void>> threads;
+    for(int i = 0 ; i <= m_SAMFields.size() ; ++i)
+    {
+        threads.push_back(std::async(&SAMFileParser::compressionThread_gzip, this, i-1));
     }
 }
 
@@ -178,6 +317,58 @@ void SAMFileParser::printCompressionData(std::string outFileName) const
     }
 }
 
+void SAMFileParser::decompressionThread_fse(int index)
+{
+    const char * data = nullptr;
+    size_t dataSize = 0;
+    size_t decompressed_data_size = 0;
+    if(index == -1) 
+    {
+        data = this->m_HeaderCompressed;
+        dataSize = this->m_CompressedHeaderDataSize;
+        decompressed_data_size = this->m_OriginalHeaderDataSize;
+    }
+    else
+    {
+        data = this->m_FieldsCompressed[index];
+        dataSize = this->m_CompressedFieldsDataSize[index];
+        decompressed_data_size = this->m_OriginalFieldsDataSize[index];
+    }
+
+    char * decompressed_data = new char[decompressed_data_size];
+    auto decompressedDataSize = FSE_decompress(decompressed_data, decompressed_data_size, data, dataSize);
+    if(FSE_isError(decompressedDataSize))
+    {
+        std::cout << FSE_getErrorName(decompressedDataSize) << "\n";
+    }
+    if(index == -1)
+    {   
+        std::istringstream headerStream(decompressed_data);
+        headerStream.imbue(std::locale(headerStream.getloc(), new only_cr_is_whitespace));
+        m_HeaderVec = {std::istream_iterator<std::string>{headerStream},
+                       std::istream_iterator<std::string>{}};
+        delete [] decompressed_data;
+    }
+    else
+    {
+        std::istringstream iss(decompressed_data);
+        iss.imbue(std::locale(iss.getloc(), new tab_is_not_whitespace));
+        m_SAMFieldsSplitted.at(index) = {std::istream_iterator<std::string>{iss},
+                                         std::istream_iterator<std::string>{}};
+        delete [] decompressed_data;
+    }
+}
+
+void SAMFileParser::decompress_fse_multithread(void)
+{
+    std::vector<std::future<void>> threads;
+    for(int i = 0 ; i <= m_SAMFields.size() ; ++i)
+    {
+        threads.push_back(std::async(&SAMFileParser::decompressionThread_fse, this, i-1));
+    }
+}
+
+
 void SAMFileParser::decompress_fse(void)
 {
     char *headerDecompressed;
@@ -209,6 +400,57 @@ void SAMFileParser::decompress_fse(void)
     }
 }
 
+void SAMFileParser::decompressionThread_zstd(int index)
+{
+    const char * data = nullptr;
+    size_t dataSize = 0;
+    size_t decompressed_data_size = 0;
+    if(index == -1) 
+    {
+        data = this->m_HeaderCompressed;
+        dataSize = this->m_CompressedHeaderDataSize;
+        decompressed_data_size = this->m_OriginalHeaderDataSize;
+    }
+    else
+    {
+        data = this->m_FieldsCompressed[index];
+        dataSize = this->m_CompressedFieldsDataSize[index];
+        decompressed_data_size = this->m_OriginalFieldsDataSize[index];
+    }
+
+    char * decompressed_data = new char[decompressed_data_size];
+    auto decompressedDataSize = ZSTD_decompress(decompressed_data, decompressed_data_size, data, dataSize);
+    if(FSE_isError(decompressedDataSize))
+    {
+        std::cout << ZSTD_getErrorName(decompressedDataSize) << "\n";
+    }
+    if(index == -1)
+    {   
+        std::istringstream headerStream(decompressed_data);
+        headerStream.imbue(std::locale(headerStream.getloc(), new only_cr_is_whitespace));
+        m_HeaderVec = {std::istream_iterator<std::string>{headerStream},
+                       std::istream_iterator<std::string>{}};
+        delete [] decompressed_data;
+    }
+    else
+    {
+        std::istringstream iss(decompressed_data);
+        iss.imbue(std::locale(iss.getloc(), new tab_is_not_whitespace));
+        m_SAMFieldsSplitted.at(index) = {std::istream_iterator<std::string>{iss},
+                                         std::istream_iterator<std::string>{}};
+        delete [] decompressed_data;
+    }
+}
+
+void SAMFileParser::decompress_zstd_multithread(void)
+{
+    std::vector<std::future<void>> threads;
+    for(int i = 0 ; i <= m_SAMFields.size() ; ++i)
+    {
+        threads.push_back(std::async(&SAMFileParser::decompressionThread_zstd, this, i-1));
+    }
+}
+
 void SAMFileParser::decompress_zstd(void)
 {
     char *headerDecompressed;
@@ -237,6 +479,33 @@ void SAMFileParser::decompress_zstd(void)
         m_SAMFieldsSplitted.at(i) = {std::istream_iterator<std::string>{iss},
                                     std::istream_iterator<std::string>{}};
         delete [] fieldDecompressed;
+    }
+}
+
+void SAMFileParser::decompressionThread_gzip(int index)
+{
+    if(index == -1) 
+    {
+        std::istringstream headerStream(gzip::decompress(this->m_HeaderCompressed, this->m_CompressedHeaderDataSize));
+        headerStream.imbue(std::locale(headerStream.getloc(), new only_cr_is_whitespace));
+        this->m_HeaderVec = {std::istream_iterator<std::string>{headerStream},
+                             std::istream_iterator<std::string>{}};
+    }
+    else
+    {
+        std::istringstream iss(gzip::decompress(this->m_FieldsCompressed[index], this->m_CompressedFieldsDataSize[index]));
+        iss.imbue(std::locale(iss.getloc(), new only_space_is_whitespace));
+        this->m_SAMFieldsSplitted.at(index) = {std::istream_iterator<std::string>{iss},
+                                               std::istream_iterator<std::string>{}};
+    }
+}
+
+void SAMFileParser::decompress_gzip_multithread(void)
+{
+    std::vector<std::future<void>> threads;
+    for(int i = 0 ; i <= m_SAMFields.size() ; ++i)
+    {
+        threads.push_back(std::async(&SAMFileParser::decompressionThread_gzip, this, i-1));
     }
 }
 
@@ -549,7 +818,7 @@ void SAMFileParser::compress_zstd_experimental(void)
     m_OriginalHeaderDataSize = m_Header.size() + 1;
     size_t headerDestinationCapacity = ZSTD_compressBound(m_Header.size() + 1);
     m_HeaderCompressed = new char[headerDestinationCapacity];
-    m_CompressedHeaderDataSize = ZSTD_compress(m_HeaderCompressed, headerDestinationCapacity + 1, m_Header.c_str() , m_Header.size() + 1, 5);
+    m_CompressedHeaderDataSize = ZSTD_compress(m_HeaderCompressed, headerDestinationCapacity + 1, m_Header.c_str() , m_Header.size() + 1, 11);
     if(ZSTD_isError(m_CompressedHeaderDataSize))
     {
         std::cout << ZSTD_getErrorName(m_CompressedHeaderDataSize) << std::endl;
@@ -561,7 +830,7 @@ void SAMFileParser::compress_zstd_experimental(void)
         experimental_OriginalFieldsDataSize[i] = experimental_SAMFields.at(i).size() + 1;
         size_t destinationCapacity = ZSTD_compressBound(experimental_SAMFields.at(i).size() + 1);
         experimantal_FieldsCompressed[i] = new char[destinationCapacity];
-        experimental_CompressedFieldsDataSize[i] = ZSTD_compress(experimantal_FieldsCompressed[i], destinationCapacity, experimental_SAMFields.at(i).c_str() , experimental_SAMFields.at(i).size() + 1, 5);
+        experimental_CompressedFieldsDataSize[i] = ZSTD_compress(experimantal_FieldsCompressed[i], destinationCapacity, experimental_SAMFields.at(i).c_str() , experimental_SAMFields.at(i).size() + 1, 11);
         if(ZSTD_isError(m_CompressedFieldsDataSize[i]))
         {
             std::cout << ZSTD_getErrorName(m_CompressedFieldsDataSize[i]) << std::endl;

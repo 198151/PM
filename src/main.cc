@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
         file.parseFile();
         std::chrono::steady_clock::time_point parseEnd = std::chrono::steady_clock::now();
         std::chrono::steady_clock::time_point compressBegin = std::chrono::steady_clock::now();
-        file.compress_gzip();
+        file.compress_zstd_multithread();
         std::chrono::steady_clock::time_point compressEnd = std::chrono::steady_clock::now();
         std::chrono::steady_clock::time_point saveBegin = std::chrono::steady_clock::now();
         file.saveCompressedDataToFile(OutileName);
@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
         file.readCompressedDataFromFile(OutileName);
         std::chrono::steady_clock::time_point readEnd = std::chrono::steady_clock::now();
         std::chrono::steady_clock::time_point decompressBegin = std::chrono::steady_clock::now();
-        file.decompress_gzip();
+        file.decompress_zstd_multithread();
         std::chrono::steady_clock::time_point decompressEnd = std::chrono::steady_clock::now();
         std::chrono::steady_clock::time_point recreateBegin = std::chrono::steady_clock::now();
         file.recreateFile();
