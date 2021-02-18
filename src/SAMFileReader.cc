@@ -11,7 +11,6 @@
 #include <numeric>
 #include <zstd.h>
 
-
 #include <gzip/compress.hpp>
 #include <gzip/config.hpp>
 #include <gzip/decompress.hpp>
@@ -104,7 +103,7 @@ void SAMFileParser::compress_zstd(void)
     m_OriginalHeaderDataSize = m_Header.size() + 1;
     size_t headerDestinationCapacity = ZSTD_compressBound(m_Header.size() + 1);
     m_HeaderCompressed = new char[headerDestinationCapacity];
-    m_CompressedHeaderDataSize = ZSTD_compress(m_HeaderCompressed, headerDestinationCapacity + 1, m_Header.c_str() , m_Header.size() + 1, 11);
+    m_CompressedHeaderDataSize = ZSTD_compress(m_HeaderCompressed, headerDestinationCapacity + 1, m_Header.c_str() , m_Header.size() + 1, 5);
     if(ZSTD_isError(m_CompressedHeaderDataSize))
     {
         std::cout << ZSTD_getErrorName(m_CompressedHeaderDataSize) << std::endl;
@@ -116,7 +115,7 @@ void SAMFileParser::compress_zstd(void)
         m_OriginalFieldsDataSize[i] = m_SAMFields.at(i).size() + 1;
         size_t destinationCapacity = ZSTD_compressBound(m_SAMFields.at(i).size() + 1);
         m_FieldsCompressed[i] = new char[destinationCapacity];
-        m_CompressedFieldsDataSize[i] = ZSTD_compress(m_FieldsCompressed[i], destinationCapacity, m_SAMFields.at(i).c_str() , m_SAMFields.at(i).size() + 1, 11);
+        m_CompressedFieldsDataSize[i] = ZSTD_compress(m_FieldsCompressed[i], destinationCapacity, m_SAMFields.at(i).c_str() , m_SAMFields.at(i).size() + 1, 5);
         if(ZSTD_isError(m_CompressedFieldsDataSize[i]))
         {
             std::cout << ZSTD_getErrorName(m_CompressedFieldsDataSize[i]) << std::endl;
@@ -147,7 +146,7 @@ void SAMFileParser::compressionThread_zstd(int index)
     }
 
     char * compressed_data = new char[destinationCapacity];
-    auto compressedDataSize = ZSTD_compress(compressed_data, destinationCapacity + 1, data, dataSize, 11);
+    auto compressedDataSize = ZSTD_compress(compressed_data, destinationCapacity + 1, data, dataSize, 5);
     if(ZSTD_isError(compressedDataSize))
     {
         std::cout << ZSTD_getErrorName(compressedDataSize) << "\n";
@@ -603,7 +602,7 @@ void SAMFileParser::saveCompressedDataToFile(std::string fileName)
     m_FieldsCompressed[i] = nullptr;
   }
   toFile.close();
-  printCompressionData(fileName + ".test");
+//  printCompressionData(fileName + ".test");
 }
 
 // ntohl
@@ -818,7 +817,7 @@ void SAMFileParser::compress_zstd_experimental(void)
     m_OriginalHeaderDataSize = m_Header.size() + 1;
     size_t headerDestinationCapacity = ZSTD_compressBound(m_Header.size() + 1);
     m_HeaderCompressed = new char[headerDestinationCapacity];
-    m_CompressedHeaderDataSize = ZSTD_compress(m_HeaderCompressed, headerDestinationCapacity + 1, m_Header.c_str() , m_Header.size() + 1, 11);
+    m_CompressedHeaderDataSize = ZSTD_compress(m_HeaderCompressed, headerDestinationCapacity + 1, m_Header.c_str() , m_Header.size() + 1, 5);
     if(ZSTD_isError(m_CompressedHeaderDataSize))
     {
         std::cout << ZSTD_getErrorName(m_CompressedHeaderDataSize) << std::endl;
@@ -830,7 +829,7 @@ void SAMFileParser::compress_zstd_experimental(void)
         experimental_OriginalFieldsDataSize[i] = experimental_SAMFields.at(i).size() + 1;
         size_t destinationCapacity = ZSTD_compressBound(experimental_SAMFields.at(i).size() + 1);
         experimantal_FieldsCompressed[i] = new char[destinationCapacity];
-        experimental_CompressedFieldsDataSize[i] = ZSTD_compress(experimantal_FieldsCompressed[i], destinationCapacity, experimental_SAMFields.at(i).c_str() , experimental_SAMFields.at(i).size() + 1, 11);
+        experimental_CompressedFieldsDataSize[i] = ZSTD_compress(experimantal_FieldsCompressed[i], destinationCapacity, experimental_SAMFields.at(i).c_str() , experimental_SAMFields.at(i).size() + 1, 5);
         if(ZSTD_isError(m_CompressedFieldsDataSize[i]))
         {
             std::cout << ZSTD_getErrorName(m_CompressedFieldsDataSize[i]) << std::endl;
