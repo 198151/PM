@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
     {
         SAMFileParser file(SAMFileName);
         std::chrono::steady_clock::time_point parseBegin = std::chrono::steady_clock::now();
-        file.parseFile();
+        file.parseFile_2();
         std::chrono::steady_clock::time_point parseEnd = std::chrono::steady_clock::now();
         std::chrono::steady_clock::time_point compressBegin = std::chrono::steady_clock::now();
         file.compress_zstd_multithread();
@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
         file.decompress_zstd_multithread();
         std::chrono::steady_clock::time_point decompressEnd = std::chrono::steady_clock::now();
         std::chrono::steady_clock::time_point recreateBegin = std::chrono::steady_clock::now();
-        file.recreateFile();
+        file.recreateFile_2();
         std::chrono::steady_clock::time_point recreateend = std::chrono::steady_clock::now();
 
         std::cout << "Reading: " << std::chrono::duration_cast<std::chrono::milliseconds>(readEnd - readBegin).count() << "[ms]" << std::endl;

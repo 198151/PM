@@ -79,8 +79,10 @@ public:
     void readCompressedDataFromFile(std::string fileName);
     void readCompressedDataFromFile_experimental(std::string fileName);
     void recreateFile(void);
+    void recreateFile_2(void);
     void recreateFile_experimental(void);
     const void parseFile();
+    const void parseFile_2();
     const void parseFile_experimental();
 
     void compressionThread_zstd(int index);
@@ -121,6 +123,7 @@ private:
     void printCompressionData(std::string outFileName) const;
     void printCompressionData_experimental(std::string outFileName) const;
     void splitLine(std::string &line, const std::string &delimiter);
+    inline void splitLine_2(const std::string &line, const std::string &delimiter);
     void splitLine_experimental(std::string &line);
     std::string packOptionalTable();
     void unpackOptionalTable(std::string table); 

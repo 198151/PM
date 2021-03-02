@@ -21,7 +21,7 @@ SAMFileParser::SAMFileParser(std::string fileName) : m_FileName(fileName)
 {
     m_Header.reserve(5000);
     for(int i = 0 ; i < 12 ; ++i) {
-        m_SAMFields.reserve(50000);
+        m_SAMFields.at(i).reserve(50000);
     }
 
     experimantal_FieldsCompressed = new char*[13];
@@ -69,6 +69,46 @@ const void SAMFileParser::parseFile(void) {
             m_Header.append(line + "\r");
         }
     }
+}
+
+const void SAMFileParser::parseFile_2(void) {
+    m_FileStream.open(m_FileName);
+    std::string line;
+    line.reserve(4000);
+    size_t noOfDelimiters = 0;
+    while (std::getline(m_FileStream, line))
+    {
+        if(!isHeader(line)) 
+        {
+            noOfDelimiters =  std::count_if(line.begin(), line.end(), [](char c){ return c == '\t'; });
+            m_AligmentDelimiters[noOfDelimiters] += 1;
+            m_AligmentLinesCount += 1;
+            splitLine_2(line, "\t");
+        }
+        else
+        {
+            noOfDelimiters = std::count_if(line.begin(), line.end(), [](char c){ return c == '\t'; });
+            m_HeaderDelimiters[noOfDelimiters] += 1;
+            m_HeaderLinesCount += 1;
+            m_Header.append(line + "\r");
+        }
+    }
+}
+
+inline void SAMFileParser::splitLine_2(const std::string &line, const std::string &delimiter)
+{
+    uint8_t requiredNumber = 11;
+    std::string::size_type delimiterPosition = 0;
+    std::string::size_type oldDelimiterPosition = 0;
+    size_t delimiterSize = delimiter.length();
+    size_t i = 0;
+    for(; i < requiredNumber; ++i)
+    {
+        delimiterPosition = line.find_first_of(delimiter, oldDelimiterPosition);
+        m_SAMFields.at(i) += " " + line.substr(oldDelimiterPosition, delimiterPosition - oldDelimiterPosition);
+        oldDelimiterPosition = delimiterPosition + delimiterSize;
+    }
+    m_SAMFields.at(11) += " " + line.substr(oldDelimiterPosition, std::string::npos);
 }
 
 void SAMFileParser::compress_fse(void)
@@ -645,6 +685,41 @@ void SAMFileParser::recreateFile(void)
         line += m_SAMFieldsSplitted.at(11).at(j) + "\n";
     }
     toFile.write(line.c_str(), line.size());
+    toFile.close();   
+}
+
+void SAMFileParser::recreateFile_2(void)
+{
+    std::ofstream toFile;
+    toFile.open(m_FileName + ".sam", std::ios::out | std::ios::app);
+    {
+        std::stringstream line;
+        for(int i = 0 ; i < m_HeaderVec.size() ; ++i)
+        {
+            line << m_HeaderVec.at(i) << "\n";
+        }
+        m_HeaderVec.clear();
+        m_HeaderVec.shrink_to_fit();
+        toFile.write(line.str().c_str(), line.str().size());
+    }
+
+    {
+        std::stringstream line;
+        for(int j = 0 ; j < m_SAMFieldsSplitted.at(0).size(); ++j)
+        {
+            for(int i = 0 ; i < 11 ; ++i) {
+                line << m_SAMFieldsSplitted.at(i).at(j) << '\t';
+                m_SAMFieldsSplitted.at(i).at(j).clear();
+                m_SAMFieldsSplitted.at(i).at(j).shrink_to_fit();
+            }
+            line << m_SAMFieldsSplitted.at(11).at(j) << '\n';
+            m_SAMFieldsSplitted.at(11).at(j).clear();
+            m_SAMFieldsSplitted.at(11).at(j).shrink_to_fit();
+            toFile.write(line.str().c_str(), line.str().size());
+            line.str( std::string() );
+            line.clear();
+        }
+    }
     toFile.close();   
 }
 

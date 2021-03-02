@@ -27,7 +27,7 @@ int main(int argc, char** argv) {
     file.decompress_gzip();
     std::chrono::steady_clock::time_point decompressionEnd = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point saveBegin = std::chrono::steady_clock::now();
-    file.recreateFile();
+    file.recreateFile_2();
     std::chrono::steady_clock::time_point saveEnd = std::chrono::steady_clock::now();
     
     std::cout << "Parsing: " << std::chrono::duration_cast<std::chrono::milliseconds>(readEnd - readBegin).count() << "[ms]\n";

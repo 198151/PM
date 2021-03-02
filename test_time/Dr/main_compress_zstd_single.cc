@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     
     SAMFileParser file(SAMFileName);
     std::chrono::steady_clock::time_point readBegin = std::chrono::steady_clock::now();
-    file.parseFile();
+    file.parseFile_2();
     std::chrono::steady_clock::time_point readEnd = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point compressionBegin = std::chrono::steady_clock::now();
     file.compress_zstd();
