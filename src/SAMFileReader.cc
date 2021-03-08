@@ -155,7 +155,7 @@ void SAMFileParser::compress_zstd(void)
         m_OriginalFieldsDataSize[i] = m_SAMFields.at(i).size() + 1;
         size_t destinationCapacity = ZSTD_compressBound(m_SAMFields.at(i).size() + 1);
         m_FieldsCompressed[i] = new char[destinationCapacity];
-        m_CompressedFieldsDataSize[i] = ZSTD_compress(m_FieldsCompressed[i], destinationCapacity, m_SAMFields.at(i).c_str() , m_SAMFields.at(i).size() + 1, 5);
+        m_CompressedFieldsDataSize[i] = ZSTD_compress(m_FieldsCompressed[i], destinationCapacity, m_SAMFields.at(i).c_str() , m_SAMFields.at(i).size() + 1, 11);
         if(ZSTD_isError(m_CompressedFieldsDataSize[i]))
         {
             std::cout << ZSTD_getErrorName(m_CompressedFieldsDataSize[i]) << std::endl;
@@ -186,7 +186,7 @@ void SAMFileParser::compressionThread_zstd(int index)
     }
 
     char * compressed_data = new char[destinationCapacity];
-    auto compressedDataSize = ZSTD_compress(compressed_data, destinationCapacity + 1, data, dataSize, 5);
+    auto compressedDataSize = ZSTD_compress(compressed_data, destinationCapacity + 1, data, dataSize, 11);
     if(ZSTD_isError(compressedDataSize))
     {
         std::cout << ZSTD_getErrorName(compressedDataSize) << "\n";
@@ -386,6 +386,8 @@ void SAMFileParser::decompressionThread_fse(int index)
         headerStream.imbue(std::locale(headerStream.getloc(), new only_cr_is_whitespace));
         m_HeaderVec = {std::istream_iterator<std::string>{headerStream},
                        std::istream_iterator<std::string>{}};
+        delete [] this->m_HeaderCompressed;
+        this->m_HeaderCompressed = nullptr;
         delete [] decompressed_data;
     }
     else
@@ -394,6 +396,8 @@ void SAMFileParser::decompressionThread_fse(int index)
         iss.imbue(std::locale(iss.getloc(), new tab_is_not_whitespace));
         m_SAMFieldsSplitted.at(index) = {std::istream_iterator<std::string>{iss},
                                          std::istream_iterator<std::string>{}};
+        delete [] this->m_FieldsCompressed[index];
+        this->m_FieldsCompressed[index] = nullptr;
         delete [] decompressed_data;
     }
 }
@@ -421,6 +425,8 @@ void SAMFileParser::decompress_fse(void)
     headerStream.imbue(std::locale(headerStream.getloc(), new only_cr_is_whitespace));
     m_HeaderVec = {std::istream_iterator<std::string>{headerStream},
                   std::istream_iterator<std::string>{}};
+    delete [] m_HeaderCompressed;
+    m_HeaderCompressed = nullptr;
     delete [] headerDecompressed;
     for(int i = 0 ; i < 12 ; ++i)
     {
@@ -435,6 +441,8 @@ void SAMFileParser::decompress_fse(void)
         iss.imbue(std::locale(iss.getloc(), new tab_is_not_whitespace));
         m_SAMFieldsSplitted.at(i) = {std::istream_iterator<std::string>{iss},
                                     std::istream_iterator<std::string>{}};
+        delete [] m_FieldsCompressed[i];
+        m_FieldsCompressed[i] = nullptr;
         delete [] fieldDecompressed;
     }
 }
@@ -469,6 +477,8 @@ void SAMFileParser::decompressionThread_zstd(int index)
         headerStream.imbue(std::locale(headerStream.getloc(), new only_cr_is_whitespace));
         m_HeaderVec = {std::istream_iterator<std::string>{headerStream},
                        std::istream_iterator<std::string>{}};
+        delete [] this->m_HeaderCompressed;
+        this->m_HeaderCompressed = nullptr;
         delete [] decompressed_data;
     }
     else
@@ -477,8 +487,11 @@ void SAMFileParser::decompressionThread_zstd(int index)
         iss.imbue(std::locale(iss.getloc(), new tab_is_not_whitespace));
         m_SAMFieldsSplitted.at(index) = {std::istream_iterator<std::string>{iss},
                                          std::istream_iterator<std::string>{}};
+        delete [] this->m_FieldsCompressed[index];
+        this->m_FieldsCompressed[index] = nullptr;
         delete [] decompressed_data;
     }
+
 }
 
 void SAMFileParser::decompress_zstd_multithread(void)
@@ -503,6 +516,8 @@ void SAMFileParser::decompress_zstd(void)
     headerStream.imbue(std::locale(headerStream.getloc(), new only_cr_is_whitespace));
     m_HeaderVec = {std::istream_iterator<std::string>{headerStream},
                   std::istream_iterator<std::string>{}};
+    delete [] m_HeaderCompressed;
+    m_HeaderCompressed = nullptr;
     delete [] headerDecompressed;
     for(int i = 0 ; i < 12 ; ++i)
     {
@@ -517,6 +532,8 @@ void SAMFileParser::decompress_zstd(void)
         iss.imbue(std::locale(iss.getloc(), new tab_is_not_whitespace));
         m_SAMFieldsSplitted.at(i) = {std::istream_iterator<std::string>{iss},
                                     std::istream_iterator<std::string>{}};
+        delete [] m_FieldsCompressed[i];
+        m_FieldsCompressed[i] = nullptr;
         delete [] fieldDecompressed;
     }
 }
@@ -529,6 +546,8 @@ void SAMFileParser::decompressionThread_gzip(int index)
         headerStream.imbue(std::locale(headerStream.getloc(), new only_cr_is_whitespace));
         this->m_HeaderVec = {std::istream_iterator<std::string>{headerStream},
                              std::istream_iterator<std::string>{}};
+        delete [] m_HeaderCompressed;
+    	m_HeaderCompressed = nullptr;
     }
     else
     {
@@ -536,6 +555,8 @@ void SAMFileParser::decompressionThread_gzip(int index)
         iss.imbue(std::locale(iss.getloc(), new only_space_is_whitespace));
         this->m_SAMFieldsSplitted.at(index) = {std::istream_iterator<std::string>{iss},
                                                std::istream_iterator<std::string>{}};
+        delete [] m_FieldsCompressed[index];
+        m_FieldsCompressed[index] = nullptr;
     }
 }
 
@@ -554,12 +575,16 @@ void SAMFileParser::decompress_gzip(void)
     headerStream.imbue(std::locale(headerStream.getloc(), new only_cr_is_whitespace));
     m_HeaderVec = {std::istream_iterator<std::string>{headerStream},
                   std::istream_iterator<std::string>{}};
+    delete [] m_HeaderCompressed;
+    m_HeaderCompressed = nullptr;
     for(int i = 0 ; i < 12 ; ++i)
     {
         std::istringstream iss(gzip::decompress(m_FieldsCompressed[i], m_CompressedFieldsDataSize[i]));
         iss.imbue(std::locale(iss.getloc(), new only_space_is_whitespace));
         m_SAMFieldsSplitted.at(i) = {std::istream_iterator<std::string>{iss},
                                     std::istream_iterator<std::string>{}};
+        delete [] this->m_FieldsCompressed[i];
+        this->m_FieldsCompressed[i] = nullptr;
     }
 }
 
@@ -719,6 +744,7 @@ void SAMFileParser::recreateFile_2(void)
             line.str( std::string() );
             line.clear();
         }
+
     }
     toFile.close();   
 }
